@@ -1,0 +1,393 @@
+module usr
+  use kinds, only : DP
+  implicit none
+
+  real(DP), allocatable :: base_flow(:,:,:,:)
+  real(DP) :: base_rate = 0._dp
+  real(DP) :: base_force = 0._dp
+  real(DP) :: force_z = 0._dp
+  real(DP) :: force_laminar = 0._dp
+
+  real(DP) :: gamma
+  real(DP) :: flow_rate = {flow_rate}
+  real(DP) :: diameter = ({extent_mesh[0]}) - ({root_mesh[0]})
+  real(DP) :: viscosity = {viscosity}
+
+
+  real(DP), allocatable :: ux_mean(:,:,:,:)
+  real(DP), allocatable :: uy_mean(:,:,:,:)
+  real(DP), allocatable :: uz_mean(:,:,:,:)
+  real(DP), allocatable :: t_mean(:,:,:,:)
+  real(DP), allocatable :: p_mean(:,:,:,:)
+
+  contains
+
+  real(DP) FUNCTION COLEBROOK(R,K)
+  ! F = COLEBROOK(R,K) computes t h e Darcy−Weisbach f r i c t i o n
+  ! f a c t o r a c c o r d i n g t o t h e Co l e b r o o k−White f o r m u l a .
+  ! R : Reynold ’ s number .
+  ! K : Roughness h e i g h t 
+  ! From Efficient Resolution of the Colebrook Equation, Didier Clamond, DOI: 10.1021/ie801626g
+
+    IMPLICIT NONE
+    real(DP) :: R, K, F , E , X1 , X2
+    real(DP) :: T = 1._dp / 3._dp
+    X1 = K * R * 0.123968186335417556_dp
+    X2 = LOG(R) - 0.779397488455682028_dp
+
+    F = X2 - 0.2_dp
+    E = (LOG( X1+F) - 0.2_dp) / ( 1.0_dp+X1+F)
+    F = F - ( 1.0_dp+X1+F+0.5_dp*E)*E*( X1+F ) / ( 1.0_dp+X1+F+E*( 1.0_dp+E*T) )
+    IF ( ( X1+X2 ) < ( 5.7_dp ) ) THEN
+      E = (LOG( X1+F)+F-X2 ) / ( 1.0_dp+X1+F)
+      F = F - ( 1.0_dp+X1+F+0.5_dp*E)*E*( X1+F) / ( 1.0_dp+X1+F+E * ( 1.0_dp+E*T) )
+    ENDIF
+    F = 1.151292546497022842_dp / F
+    COLEBROOK = F*F
+    return
+  end function colebrook
+
+
+  real(DP) function darcy_factor(use_colebrook)
+    real(DP), parameter :: darcy = 56.908
+    real(DP) :: Re
+    logical :: use_colebrook
+
+    Re = flow_rate * diameter / viscosity
+
+    if (Re < 3000 .or. .not. use_colebrook) then
+      darcy_factor = darcy / Re
+      return
+    endif
+
+    darcy_factor = colebrook(Re,0._dp)
+    
+    return 
+  end function darcy_factor
+
+
+  subroutine get_base_flow()
+    use kinds, only : DP
+    use parallel, only : nid
+    use size_m, only : nx1, ny1, nz1, nelv
+    use soln, only : vx, vy, vz, t
+    use soln, only : v3mask, vmult
+    use soln, only : tmask, tmult
+    use soln, only : vdiff, vtrans
+    use geom, only : binvm1, bm1
+    use geom, only : xm1, ym1
+    use solver, only : hsolve, approx_space
+    use ds, only : dssum
+    use tstep, only : pi
+    implicit none
+
+    real(DP), allocatable :: rhs(:,:,:,:)
+    real(DP), allocatable :: h1(:,:,:,:), h2(:,:,:,:)
+    real(DP), external :: glsum
+    type(approx_space) :: apx
+
+    if (.not. allocated(base_flow)) then
+      allocate(base_flow(nx1,ny1,nz1,nelv))
+    endif
+
+    allocate(rhs(nx1,ny1,nz1,nelv))
+    allocate(h1(nx1,ny1,nz1,nelv))
+    allocate(h2(nx1,ny1,nz1,nelv))
+
+    call sethlm(h1, h2, -1)
+    
+    base_force = 1._dp
+    rhs = base_force * bm1 * vtrans(:,:,:,:,1)  * v3mask
+    call hsolve('BASE',base_flow,rhs,h1,h2,v3mask,vmult,1,{tolhelm},256,3 &
+        ,apx,binvm1)
+
+    base_rate = glsum(base_flow * bm1, nx1*ny1*nz1*nelv) / ({extent_mesh[2]})
+
+    deallocate(h1, h2, rhs)
+
+  end subroutine get_base_flow
+
+end module usr
+
+!-----------------------------------------------------------------------
+    subroutine uservp(ix,iy,iz,eg) ! set variable properties
+
+    return
+    end subroutine uservp
+!-----------------------------------------------------------------------
+    subroutine userf(ix,iy,iz,eg) ! set acceleration term
+    use nekuse, only : x, y, z, ffx, ffy, ffz, temp
+    use kinds, only : DP
+    use tstep, only : time
+    use usr, only : force_z
+    implicit none
+
+!     Note: this is an acceleration term, NOT a force!
+!     Thus, ffx will subsequently be multiplied by rho(x,t).
+
+    integer :: ix, iy, iz, eg
+    real(DP) :: tt, amp
+    real(DP) :: x0, y0, z0, r
+    tt = 2.5
+    amp = 0.4
+
+    ! only trip in y direction
+    ffx = 0.0
+    ffz = force_z
+
+    ! only trip at early times
+    if (time >= tt) then
+      ffy = 0.0
+      return
+    endif
+
+    y0 = 0.0
+    x0 = 0.2*sin(2*time+3)
+    z0 = 1.0
+    r=(x-x0)**2+(y-y0)**2+(z-z0)**2
+    ffy = amp*sin(5*z+11.4*x+3*time+3)*exp(-8*r)
+
+    x0 = 0.2*sin(2*time+1)
+    z0 = 1.0+2.5
+    r=(x-x0)**2+(y-y0)**2+(z-z0)**2
+    ffy = ffy+amp*sin(-3.5566*z+10*x+3*time)*exp(-8*r)
+
+    x0 = 0.2*sin(2*time)
+    z0 = 1.0+5
+    r=(x-x0)**2+(y-y0)**2+(z-z0)**2
+    ffy = ffy+amp*sin(6.134*z+9.31*x+3*time+8)*exp(-8*r)
+
+    x0 = 0.2*sin(2*time+8)
+    z0 = 1.0+7.5
+    r=(x-x0)**2+(y-y0)**2+(z-z0)**2
+    ffy = ffy+amp*sin(-7.12*z+10.1*x+3*time+15)*exp(-8*r)
+
+    x0 = 0.2*sin(2*time+15)
+    z0 = 1.0+10
+    r=(x-x0)**2+(y-y0)**2+(z-z0)**2
+    ffy = ffy+amp*sin(4.98*z+9.87*x+3*time)*exp(-8*r)
+
+    return
+    end subroutine userf
+!-----------------------------------------------------------------------
+    subroutine userq(ix,iy,iz,eg) ! set source term
+    use size_m
+    use nekuse
+    use usr, only : gamma
+    implicit none
+
+    integer :: ix, iy, iz, eg
+    qvol   = gamma * uz
+
+    return
+    end subroutine userq
+!-----------------------------------------------------------------------
+    subroutine userq2(q) ! set source term
+
+    return
+    end subroutine userq2
+!-----------------------------------------------------------------------
+    subroutine userbc(ix,iy,iz,iside,ieg) ! set up boundary conditions
+    use nekuse, only : ux, uy, uz, temp, x, y, z
+
+    ux = 0.0
+    uy = 0.0
+    uz = 0.0
+    temp = 0.0
+
+    return
+    end subroutine userbc
+!-----------------------------------------------------------------------
+    subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+    use kinds, only : DP
+    use parallel, only : nid
+    use usr, only : flow_rate, diameter, viscosity, darcy_factor
+    use usr, only : force_z, gamma, force_laminar
+    use nekuse, only : x, y, z, ux, uy, uz, temp
+    use tstep, only : pi
+    implicit none
+    integer :: ix, iy, iz, eg
+    integer :: i, j
+    real(DP) :: prefac
+    real(DP) :: kx, ky
+
+    ! Initial conditions: laminar profile
+    if (force_laminar == 0._dp) then
+      force_laminar = flow_rate**2. * darcy_factor(.true.) / (2. * diameter**2.) 
+      if (nid == 0) write(*,*) "Expecting Re_tau = ", sqrt(abs(force_laminar)) * diameter**(3./2.) / (4. * viscosity)
+      force_laminar = flow_rate**2. * darcy_factor(.false.) / (2. * diameter**2.) 
+    endif
+    prefac = 16 * force_laminar / viscosity
+    force_z = force_laminar
+    gamma = force_laminar
+    uz = 0._dp
+    temp = 0._dp
+    do i = 0, 6
+      kx = (2*i+1) * pi
+      do j = 0, 6
+        ky = (2*j+1) * pi
+        uz = uz + (-1)**(i+j) * cos(kx * x) * cos(ky * y)/ kx / ky / (kx**2. + ky**2.) 
+        temp = temp + (-1)**(i+j) * cos(kx * x) * cos(ky * y) / (kx**2. + ky**2.)**2. / kx / ky
+      enddo
+    enddo
+    uz = uz * prefac
+    temp = temp * prefac * gamma / {conductivity}
+
+    ! nothing in the stream-wise direction
+    ux=0.
+    uy=0.
+
+    return
+    end subroutine useric
+!-----------------------------------------------------------------------
+    subroutine userchk()
+    use kinds, only : DP
+    use size_m, only : lx1, ly1, lz1, lelt, lelv
+    use tstep, only : istep
+    use input, only : param, ifxyo
+    use parallel, only : nid
+    use soln, only : vx, vy, vz, pr, t
+    use geom, only : bm1
+    use usr, only : force_z, diameter, viscosity, flow_rate
+    use usr, only : get_base_flow
+    use usr, only : base_flow, base_rate, base_force
+    use tstep, only : dt, ab, bd, nsteps
+    use usr, only : ux_mean, uy_mean, uz_mean, t_mean, p_mean
+    implicit none
+
+    real(DP), external :: glamax, glsum
+    real(DP) :: tmax, umax, vmax, wmax, ttol, wtol
+    real(DP) :: real_rate, delta_rate, relaxation_factor
+    real(DP) :: total_force
+    real(DP), save :: dt_old = 0._dp, bd_old = 0._dp
+
+    if (param(69) < 1 .and. istep == 0) call outpost(vx,vy,vz,pr,t,'   ')
+    ifxyo = .false.
+    if (istep >= 1 .and. (abs(bd(1)-bd_old) + abs(dt - dt_old) > 1.e-9)) then
+       call get_base_flow()
+       dt_old = dt; bd_old = bd(1)
+    endif
+    if (istep > 0 .and. mod(istep, 32) == 0) call runstat()
+
+    if (istep > 128) then
+      if (.not. allocated(ux_mean)) then
+        allocate(ux_mean(lx1,ly1,lz1,lelv))
+        allocate(uy_mean(lx1,ly1,lz1,lelv))
+        allocate(uz_mean(lx1,ly1,lz1,lelv))
+        allocate(t_mean( lx1,ly1,lz1,lelv))
+        allocate(p_mean( lx1,ly1,lz1,lelv))
+        ux_mean = 0._dp; uy_mean = 0._dp; uz_mean = 0._dp
+        t_mean = 0._dp; p_mean = 0._dp
+      endif
+      ux_mean = ux_mean + 1./(nsteps - 128.) * vx
+      uy_mean = uy_mean + 1./(nsteps - 128.) * vy
+      uz_mean = uz_mean + 1./(nsteps - 128.) * vz
+      t_mean  =  t_mean + 1./(nsteps - 128.) * t(:,:,:,:,1)
+      p_mean  =  p_mean + 1./(nsteps - 128.) * pr
+    endif
+    if (istep == nsteps) then
+      call outpost(ux_mean,uy_mean,uz_mean,p_mean,t_mean,'MEAN')
+    endif
+
+    ttol = glsum(t(:,:,:,:,1) * bm1, lx1*ly1*lz1*lelt)
+    wtol = glsum(vz * bm1, lx1*ly1*lz1*lelt)
+    real_rate = wtol / {extent_mesh[2]}
+
+    if (istep >= 1) then
+      delta_rate = (flow_rate - real_rate) / base_rate
+      vz = vz + delta_rate * base_flow
+      total_force =  force_z + delta_rate * base_force 
+      if (nid == 0) write(*,*) "Adjusting flow by ", delta_rate
+    endif
+
+    if (nid == 0) write(*,'(A,F14.3,A,F14.3)') "Re = ", &
+                              real_rate * diameter / viscosity, &
+                              "   Re_tau = ", &
+                              sqrt(abs(total_force)) * diameter**(3./2.) / (4. * viscosity)
+
+
+    return
+    end subroutine userchk
+!-----------------------------------------------------------------------
+    subroutine usrdat()   ! This routine to modify element vertices
+      use kinds, only : DP
+      use parallel, only : nid
+      use size_m, only : nelt
+      use input, only : xc, yc, zc
+      use mesh, only : shape_x
+      use mesh, only : ticks_x, ticks_y, ticks_z
+      use parallel, only : lglel
+      use tstep, only : pi
+      implicit none
+
+      integer :: iel, ieg
+      integer :: i
+      integer :: ix(3)
+
+
+      if ({alpha[0]} >= 0) then
+        do i = 1, shape_x(1)-1
+          ticks_x(i) = .5*sin(ticks_x(i)*(pi - 2.*{alpha[0]})) / sin(pi/2. - {alpha[0]})
+        enddo
+      endif
+      if (nid == 0) write(*,*) ticks_x
+
+      if ({alpha[1]} >= 0) then
+        do i = 1, shape_x(2)-1
+          ticks_y(i) = .5*sin(ticks_y(i)*(pi - 2.*{alpha[1]})) / sin(pi/2. - {alpha[1]})
+        enddo
+      endif
+      if (nid == 0) write(*,*) ticks_y
+
+      do iel = 1, nelt
+        ieg = lglel(iel)
+
+        ix(1) = mod(ieg - 1, shape_x(1))
+        ix(2) = mod((ieg-1)/shape_x(1), shape_x(2))
+        ix(3) = mod((ieg-1)/(shape_x(1)*shape_x(2)), shape_x(3))
+
+        XC(1,iel) = ticks_x(ix(1))
+        XC(2,iel) = ticks_x(ix(1)+1)
+        XC(3,iel) = ticks_x(ix(1)+1)
+        XC(4,iel) = ticks_x(ix(1))
+        XC(5,iel) = ticks_x(ix(1))
+        XC(6,iel) = ticks_x(ix(1)+1)
+        XC(7,iel) = ticks_x(ix(1)+1)
+        XC(8,iel) = ticks_x(ix(1))
+
+        YC(1,iel) = ticks_y(ix(2))
+        YC(2,iel) = ticks_y(ix(2))
+        YC(3,iel) = ticks_y(ix(2)+1)
+        YC(4,iel) = ticks_y(ix(2)+1)
+        YC(5,iel) = ticks_y(ix(2))
+        YC(6,iel) = ticks_y(ix(2))
+        YC(7,iel) = ticks_y(ix(2)+1)
+        YC(8,iel) = ticks_y(ix(2)+1)
+
+        ZC(1,iel) = ticks_z(ix(3))
+        ZC(2,iel) = ticks_z(ix(3))
+        ZC(3,iel) = ticks_z(ix(3))
+        ZC(4,iel) = ticks_z(ix(3))
+        ZC(5,iel) = ticks_z(ix(3)+1)
+        ZC(6,iel) = ticks_z(ix(3)+1)
+        ZC(7,iel) = ticks_z(ix(3)+1)
+        ZC(8,iel) = ticks_z(ix(3)+1)
+      enddo
+
+    return
+    end subroutine usrdat
+!-----------------------------------------------------------------------
+    subroutine usrdat2()  ! This routine to modify mesh coordinates
+     use kinds, only : DP
+     implicit none
+
+    return
+    end subroutine usrdat2
+!-----------------------------------------------------------------------
+    subroutine usrdat3()
+
+    return
+    end subroutine usrdat3
+!-----------------------------------------------------------------------
+
+
