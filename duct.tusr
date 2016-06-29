@@ -9,7 +9,7 @@ module usr
   real(DP) :: force_laminar = 0._dp
 
   real(DP) :: gamma
-  real(DP) :: flow_rate = {flow_rate}
+  real(DP) :: flow_rate = {flowrate}
   real(DP) :: diameter = ({extent_mesh[0]}) - ({root_mesh[0]})
   real(DP) :: viscosity = {viscosity}
 
@@ -223,9 +223,9 @@ end module usr
     uz = 0._dp
     temp = 0._dp
     do i = 0, 6
-      kx = (2*i+1) * pi
+      kx = (2*i+1) * pi / 2.0
       do j = 0, 6
-        ky = (2*j+1) * pi
+        ky = (2*j+1) * pi / 2.0
         uz = uz + (-1)**(i+j) * cos(kx * x) * cos(ky * y)/ kx / ky / (kx**2. + ky**2.) 
         temp = temp + (-1)**(i+j) * cos(kx * x) * cos(ky * y) / (kx**2. + ky**2.)**2. / kx / ky
       enddo
@@ -324,15 +324,24 @@ end module usr
       integer :: i
       integer :: ix(3)
 
-
-      if ({alpha[0]} >= 0) then
+      if (shape_x(1) == 16) then
+        ticks_x = (/-1.0, -0.98078528, -0.923879533, -0.831469612, -0.707106781, &
+                    -0.555570233, -0.382683432, -0.195090322, 0.0, 0.195090322, &
+                     0.382683432, 0.555570233, 0.707106781, 0.831469612, &
+                     0.923879533, 0.98078528/)
+      else if ({alpha[0]} >= 0) then
         do i = 1, shape_x(1)-1
           ticks_x(i) = .5*sin(ticks_x(i)*(pi - 2.*{alpha[0]})) / sin(pi/2. - {alpha[0]})
         enddo
       endif
       if (nid == 0) write(*,*) ticks_x
 
-      if ({alpha[1]} >= 0) then
+      if (shape_x(2) == 16) then
+        ticks_y = (/-1.0, -0.98078528, -0.923879533, -0.831469612, -0.707106781, &
+                    -0.555570233, -0.382683432, -0.195090322, 0.0, 0.195090322, &
+                     0.382683432, 0.555570233, 0.707106781, 0.831469612, &
+                     0.923879533, 0.98078528/)
+      else if ({alpha[1]} >= 0) then
         do i = 1, shape_x(2)-1
           ticks_y(i) = .5*sin(ticks_y(i)*(pi - 2.*{alpha[1]})) / sin(pi/2. - {alpha[1]})
         enddo

@@ -1,0 +1,71 @@
+{
+  "name" : "lsd_180",
+  "courant": 0.35,
+  "velocity" : 1.0,
+  "alpha" : [
+    0.3, 
+    0.3,
+    0.0
+  ],
+  "root_mesh": [
+    -1.0,
+    -1.0,
+     0.0
+  ],
+  "no_check": 1,
+  "io_pad": 21,
+  "tolrel": 0.0,
+  "front_bound": "W",
+  "wait_vel": 2.0,
+  "io_files": -4.0,
+  "dealiasing_order": 18,
+  "right_bound": "W",
+  "bottom_bound": "P",
+  "ngmres": 16,
+  "density": 1.0,
+  "io_prec": 8,
+  "filter_wt": 0.05,
+  "scale_mesh": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "conductivity": 0.0004,
+  "dt": -1.6e-3,
+  "left_bound": "W",
+  "num_steps": 0.0,
+  "max_fft_procs": 0,
+  "cps": 0.0,
+  "shape_mesh": [
+    16,
+    16,
+    64 
+  ],
+  "order": 12,
+  "tolabs": 0.0,
+  "nvel": 4,
+  "uservp": 0,
+  "dt_initial": 1e-04,
+  "end_time": 2.0,
+  "restart": 0.0,
+  "top_bound": "P",
+  "rho_cp": 1.0,
+  "tolhelm": 1.0e-6,
+  "wait_pres": 2.0,
+  "npres": 8,
+  "io_time": 1.0,
+  "extent_mesh": [
+    1.0,
+    1.0,
+    25.0
+  ],
+  "toldiv": 1.0e-5,
+  "dim": 3,
+  "procs": 4,
+  "back_bound": "W",
+  "io_step": 0.0,
+  "viscosity": 0.0004,
+  "flow_dir": -3.0,
+  "flowrate": 1.0,
+  "num_fields": 2
+}
