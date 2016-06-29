@@ -101,7 +101,8 @@ module usr
     call hsolve('BASE',base_flow,rhs,h1,h2,v3mask,vmult,1,{tolhelm},256,3 &
         ,apx,binvm1)
 
-    base_rate = glsum(base_flow * bm1, nx1*ny1*nz1*nelv) / ({extent_mesh[2]})
+    base_rate = glsum(base_flow * bm1, nx1*ny1*nz1*nelv) / &
+                ({extent_mesh[2]} * {extent_mesh[0]} * {extent_mesh[1]})
 
     deallocate(h1, h2, rhs)
 
@@ -291,7 +292,7 @@ end module usr
 
     ttol = glsum(t(:,:,:,:,1) * bm1, lx1*ly1*lz1*lelt)
     wtol = glsum(vz * bm1, lx1*ly1*lz1*lelt)
-    real_rate = wtol / {extent_mesh[2]}
+    real_rate = wtol / ({extent_mesh[2]} * {extent_mesh[0]} * {extent_mesh[1]})
 
     if (istep >= 1) then
       delta_rate = (flow_rate - real_rate) / base_rate
@@ -301,7 +302,7 @@ end module usr
     endif
 
     if (nid == 0) write(*,'(A,F14.3,A,F14.3)') "Re = ", &
-                              real_rate * diameter / viscosity, &
+                              real_rate * (diameter/2.) / viscosity, &
                               "   Re_tau = ", &
                               sqrt(abs(total_force)) * diameter**(3./2.) / (4. * viscosity)
 
@@ -328,7 +329,7 @@ end module usr
         ticks_x = (/-1.0, -0.98078528, -0.923879533, -0.831469612, -0.707106781, &
                     -0.555570233, -0.382683432, -0.195090322, 0.0, 0.195090322, &
                      0.382683432, 0.555570233, 0.707106781, 0.831469612, &
-                     0.923879533, 0.98078528/)
+                     0.923879533, 0.98078528, 1.0/)
       else if ({alpha[0]} >= 0) then
         do i = 1, shape_x(1)-1
           ticks_x(i) = .5*sin(ticks_x(i)*(pi - 2.*{alpha[0]})) / sin(pi/2. - {alpha[0]})
@@ -340,7 +341,7 @@ end module usr
         ticks_y = (/-1.0, -0.98078528, -0.923879533, -0.831469612, -0.707106781, &
                     -0.555570233, -0.382683432, -0.195090322, 0.0, 0.195090322, &
                      0.382683432, 0.555570233, 0.707106781, 0.831469612, &
-                     0.923879533, 0.98078528/)
+                     0.923879533, 0.98078528, 1.0/)
       else if ({alpha[1]} >= 0) then
         do i = 1, shape_x(2)-1
           ticks_y(i) = .5*sin(ticks_y(i)*(pi - 2.*{alpha[1]})) / sin(pi/2. - {alpha[1]})
