@@ -46,6 +46,6 @@ from os.path import join
 overrides = [base,]
 workdirs = [join(getcwd(), x["name"]) for x in overrides]
 configs = [configure(base, override, workdir) for override, workdir in zip(overrides, workdirs)]
-res = [series(config, tusr, job_time = 8.0) for config in configs]
+res = [series(config, tusr, job_time = 2.0) for config in configs]
 final = run_all(res, base, get=get_sync)
 

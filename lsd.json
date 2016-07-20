@@ -64,5 +64,11 @@
   "back_bound": "W",
   "io_step": 32.0,
   "viscosity": 0.000013793,
-  "num_fields": 2
+  "num_fields": 2,
+  "displacement_thickness" : 0.3333333333,
+  "num_trip_modes" : 5.0,
+  "trip_timestep" : 2.5,
+  "trip_time_dependant_amplitude" : 0.05,
+  "trip_time_independant_amplitude" : 0.0,
+  "trip_direction" : 0.0
 }

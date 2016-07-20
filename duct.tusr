@@ -129,8 +129,8 @@ end module usr
     integer :: ix, iy, iz, eg
     real(DP) :: tt, amp
     real(DP) :: x0, y0, z0, r
-    tt = 2.5
-    amp = 0.4
+    tt = {trip_time}
+    amp = {trip_amplitude}
 
     ! only trip in y direction
     ffx = 0.0
@@ -298,13 +298,14 @@ end module usr
       delta_rate = (flow_rate - real_rate) / base_rate
       vz = vz + delta_rate * base_flow
       total_force =  force_z + delta_rate * base_force 
+      force_z = 0._dp
       if (nid == 0) write(*,*) "Adjusting flow by ", delta_rate
     endif
 
     if (nid == 0) write(*,'(A,F14.3,A,F14.3)') "Re = ", &
                               real_rate * (diameter/2.) / viscosity, &
                               "   Re_tau = ", &
-                              sqrt(abs(total_force)) * diameter**(3./2.) / (4. * viscosity)
+                              sqrt(abs(total_force)) * (diameter/2.) / (viscosity)
 
 
     return
